@@ -1,7 +1,7 @@
 """
-TRE Price Calculator - Web版 v2
-Flask + SQLite + WebSocket 实时同步
-支持多人同时访问、实时数据同步
+TRE Price Calculator - Web版 v3
+Flask + SQLite + 实时同步 + 快照备份
+支持：自定义折扣、重置恢复、手动保存快照
 """
 
 from flask import Flask, render_template, request, jsonify
@@ -15,18 +15,16 @@ app = Flask(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.db')
 
-# ============ 数据库 ============
 
 def get_db():
-    """获取数据库连接"""
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
     return db
 
+
 def init_db():
-    """初始化数据库"""
     db = get_db()
     db.executescript("""
         CREATE TABLE IF NOT EXISTS sessions (
@@ -58,21 +56,26 @@ def init_db():
             sort_order INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            data TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT ''
+        );
     """)
     db.commit()
     db.close()
 
-# ============ 辅助函数 ============
 
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+
 def build_session_dict(db, session):
-    """构建会话完整数据"""
     s = dict(session)
     persons = db.execute(
-        "SELECT * FROM persons WHERE session_id=? ORDER BY sort_order, id",
-        (s['id'],)
+        "SELECT * FROM persons WHERE session_id=? ORDER BY sort_order, id", (s['id'],)
     ).fetchall()
 
     s['persons'] = []
@@ -83,12 +86,10 @@ def build_session_dict(db, session):
     for p in persons:
         pd = dict(p)
         clocks = db.execute(
-            "SELECT * FROM clock_fees WHERE person_id=? ORDER BY sort_order, id",
-            (pd['id'],)
+            "SELECT * FROM clock_fees WHERE person_id=? ORDER BY sort_order, id", (pd['id'],)
         ).fetchall()
         extras = db.execute(
-            "SELECT * FROM extra_items WHERE person_id=? ORDER BY sort_order, id",
-            (pd['id'],)
+            "SELECT * FROM extra_items WHERE person_id=? ORDER BY sort_order, id", (pd['id'],)
         ).fetchall()
 
         pd['clock_fees'] = [dict(c) for c in clocks]
@@ -107,10 +108,76 @@ def build_session_dict(db, session):
     s['clock_discounted_all'] = round(s['clock_discounted_all'], 2)
     s['extra_total_all'] = round(s['extra_total_all'], 2)
     s['grand_total'] = round(s['clock_discounted_all'] + s['extra_total_all'], 2)
+
+    # 检查有无备份可恢复
+    backup = db.execute(
+        "SELECT * FROM snapshots WHERE session_id=? AND label='__reset_backup__' ORDER BY created_at DESC LIMIT 1",
+        (s['id'],)
+    ).fetchone()
+    s['has_backup'] = backup is not None
+
     return s
 
+
+def session_to_json(db, session_id):
+    """将会话完整数据导出为JSON（用于快照）"""
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+    if not session:
+        return {}
+    s = dict(session)
+    persons = db.execute(
+        "SELECT * FROM persons WHERE session_id=? ORDER BY sort_order, id", (session_id,)
+    ).fetchall()
+    result = {
+        'name': s['name'],
+        'discount': s['discount'],
+        'created_at': s['created_at'],
+        'persons': []
+    }
+    for p in persons:
+        pd = dict(p)
+        clocks = db.execute(
+            "SELECT * FROM clock_fees WHERE person_id=? ORDER BY sort_order, id", (pd['id'],)
+        ).fetchall()
+        extras = db.execute(
+            "SELECT * FROM extra_items WHERE person_id=? ORDER BY sort_order, id", (pd['id'],)
+        ).fetchall()
+        result['persons'].append({
+            'name': pd['name'],
+            'clock_fees': [c['fee'] for c in clocks],
+            'extra_items': [{'name': e['name'], 'price': e['price']} for e in extras]
+        })
+    return result
+
+
+def restore_from_json(db, session_id, data):
+    """从快照JSON恢复数据到会话"""
+    # 先清空现有数据
+    db.execute("DELETE FROM clock_fees WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (session_id,))
+    db.execute("DELETE FROM extra_items WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (session_id,))
+    db.execute("DELETE FROM persons WHERE session_id=?", (session_id,))
+
+    # 恢复折扣
+    if 'discount' in data:
+        db.execute("UPDATE sessions SET discount=? WHERE id=?", (data['discount'], session_id))
+
+    # 恢复客户
+    for i, pd in enumerate(data.get('persons', [])):
+        db.execute("INSERT INTO persons (session_id, name, sort_order) VALUES (?,?,?)",
+                   (session_id, pd['name'], i))
+        pid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        for j, fee in enumerate(pd.get('clock_fees', [])):
+            db.execute("INSERT INTO clock_fees (person_id, fee, sort_order) VALUES (?,?,?)",
+                       (pid, fee, j))
+        for j, extra in enumerate(pd.get('extra_items', [])):
+            db.execute("INSERT INTO extra_items (person_id, name, price, sort_order) VALUES (?,?,?,?)",
+                       (pid, extra['name'], extra['price'], j))
+
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), session_id))
+    db.commit()
+
+
 def generate_receipt(session_data):
-    """生成账单文本"""
     s = session_data
     lines = []
     lines.append("=" * 50)
@@ -144,13 +211,13 @@ def generate_receipt(session_data):
     lines.append("=" * 50)
     return "\n".join(lines)
 
+
 # ============ 路由 ============
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# --- 会话 CRUD ---
 
 @app.route('/api/sessions', methods=['GET'])
 def list_sessions():
@@ -170,6 +237,7 @@ def list_sessions():
     db.close()
     return jsonify(result)
 
+
 @app.route('/api/sessions', methods=['POST'])
 def create_session():
     data = request.json or {}
@@ -187,6 +255,7 @@ def create_session():
     db.close()
     return jsonify(result)
 
+
 @app.route('/api/sessions/<sid>', methods=['GET'])
 def get_session(sid):
     db = get_db()
@@ -198,32 +267,16 @@ def get_session(sid):
     db.close()
     return jsonify(result)
 
+
 @app.route('/api/sessions/<sid>', methods=['DELETE'])
 def delete_session(sid):
     db = get_db()
+    db.execute("DELETE FROM snapshots WHERE session_id=?", (sid,))
     db.execute("DELETE FROM sessions WHERE id=?", (sid,))
     db.commit()
     db.close()
     return jsonify({'ok': True})
 
-@app.route('/api/sessions/<sid>/reset', methods=['POST'])
-def reset_session(sid):
-    """重置会话：清空所有客户数据，保留会话本身"""
-    db = get_db()
-    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
-    if not session:
-        db.close()
-        return jsonify({'error': '会话不存在'}), 404
-    # 删除所有关联数据（CASCADE会自动删clock_fees和extra_items）
-    db.execute("DELETE FROM clock_fees WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (sid,))
-    db.execute("DELETE FROM extra_items WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (sid,))
-    db.execute("DELETE FROM persons WHERE session_id=?", (sid,))
-    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
-    db.commit()
-    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
-    result = build_session_dict(db, session)
-    db.close()
-    return jsonify(result)
 
 # --- 折扣 ---
 
@@ -244,6 +297,180 @@ def set_discount(sid):
     db.close()
     return jsonify(result)
 
+
+# --- 重置（自动备份） ---
+
+@app.route('/api/sessions/<sid>/reset', methods=['POST'])
+def reset_session(sid):
+    """重置会话：自动备份当前数据，然后清空"""
+    db = get_db()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not session:
+        db.close()
+        return jsonify({'error': '会话不存在'}), 404
+
+    # 自动备份当前数据
+    snapshot_data = session_to_json(db, sid)
+    if snapshot_data.get('persons'):
+        db.execute(
+            "INSERT INTO snapshots (session_id, label, data, created_at) VALUES (?,?,?,?)",
+            (sid, '__reset_backup__', json.dumps(snapshot_data, ensure_ascii=False), now_str())
+        )
+
+    # 清空数据
+    db.execute("DELETE FROM clock_fees WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (sid,))
+    db.execute("DELETE FROM extra_items WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (sid,))
+    db.execute("DELETE FROM persons WHERE session_id=?", (sid,))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
+
+
+# --- 恢复最近备份 ---
+
+@app.route('/api/sessions/<sid>/restore', methods=['POST'])
+def restore_session(sid):
+    """恢复最近一次重置前的数据"""
+    db = get_db()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not session:
+        db.close()
+        return jsonify({'error': '会话不存在'}), 404
+
+    backup = db.execute(
+        "SELECT * FROM snapshots WHERE session_id=? AND label='__reset_backup__' ORDER BY created_at DESC LIMIT 1",
+        (sid,)
+    ).fetchone()
+    if not backup:
+        db.close()
+        return jsonify({'error': '没有可恢复的备份'}), 404
+
+    data = json.loads(backup['data'])
+    restore_from_json(db, sid, data)
+
+    # 删除已恢复的备份
+    db.execute("DELETE FROM snapshots WHERE id=?", (backup['id'],))
+    db.commit()
+
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
+
+
+# --- 手动保存快照 ---
+
+@app.route('/api/sessions/<sid>/snapshots', methods=['GET'])
+def list_snapshots(sid):
+    """列出会话的所有快照"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM snapshots WHERE session_id=? AND label!='__reset_backup__' ORDER BY created_at DESC",
+        (sid,)
+    ).fetchall()
+    result = []
+    for r in rows:
+        rd = dict(r)
+        data = json.loads(rd['data'])
+        result.append({
+            'id': rd['id'],
+            'label': rd['label'],
+            'created_at': rd['created_at'],
+            'person_count': len(data.get('persons', [])),
+            'grand_total': _calc_grand_total(data)
+        })
+    db.close()
+    return jsonify(result)
+
+
+@app.route('/api/sessions/<sid>/snapshots', methods=['POST'])
+def save_snapshot(sid):
+    """手动保存快照"""
+    data = request.json or {}
+    label = data.get('label', '').strip()
+    if not label:
+        label = now_str()
+    db = get_db()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not session:
+        db.close()
+        return jsonify({'error': '会话不存在'}), 404
+
+    snapshot_data = session_to_json(db, sid)
+    db.execute(
+        "INSERT INTO snapshots (session_id, label, data, created_at) VALUES (?,?,?,?)",
+        (sid, label, json.dumps(snapshot_data, ensure_ascii=False), now_str())
+    )
+    db.commit()
+    db.close()
+    return jsonify({'ok': True, 'label': label})
+
+
+@app.route('/api/sessions/<sid>/snapshots/<int:snap_id>', methods=['GET'])
+def get_snapshot(sid, snap_id):
+    """获取快照详情"""
+    db = get_db()
+    snap = db.execute(
+        "SELECT * FROM snapshots WHERE id=? AND session_id=?", (snap_id, sid)
+    ).fetchone()
+    if not snap:
+        db.close()
+        return jsonify({'error': '快照不存在'}), 404
+    data = json.loads(snap['data'])
+    db.close()
+    return jsonify({
+        'id': snap['id'],
+        'label': snap['label'],
+        'created_at': snap['created_at'],
+        'data': data
+    })
+
+
+@app.route('/api/sessions/<sid>/snapshots/<int:snap_id>/restore', methods=['POST'])
+def restore_snapshot(sid, snap_id):
+    """从快照恢复"""
+    db = get_db()
+    snap = db.execute(
+        "SELECT * FROM snapshots WHERE id=? AND session_id=?", (snap_id, sid)
+    ).fetchone()
+    if not snap:
+        db.close()
+        return jsonify({'error': '快照不存在'}), 404
+
+    data = json.loads(snap['data'])
+    restore_from_json(db, sid, data)
+
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
+
+
+@app.route('/api/sessions/<sid>/snapshots/<int:snap_id>', methods=['DELETE'])
+def delete_snapshot(sid, snap_id):
+    """删除快照"""
+    db = get_db()
+    db.execute("DELETE FROM snapshots WHERE id=? AND session_id=?", (snap_id, sid))
+    db.commit()
+    db.close()
+    return jsonify({'ok': True})
+
+
+def _calc_grand_total(data):
+    """从快照数据计算总计"""
+    discount = data.get('discount', 0.75)
+    total = 0
+    for p in data.get('persons', []):
+        clock_total = sum(p.get('clock_fees', []))
+        clock_discounted = round(clock_total * discount, 2)
+        extra_total = sum(e['price'] for e in p.get('extra_items', []))
+        total += clock_discounted + extra_total
+    return round(total, 2)
+
+
 # --- 客户 ---
 
 @app.route('/api/sessions/<sid>/persons', methods=['POST'])
@@ -263,6 +490,7 @@ def add_person(sid):
     db.close()
     return jsonify(result)
 
+
 @app.route('/api/sessions/<sid>/persons/<int:pid>', methods=['DELETE'])
 def remove_person(sid, pid):
     db = get_db()
@@ -273,6 +501,7 @@ def remove_person(sid, pid):
     result = build_session_dict(db, session)
     db.close()
     return jsonify(result)
+
 
 # --- 卡钟 ---
 
@@ -300,6 +529,7 @@ def add_clock(sid, pid):
     db.close()
     return jsonify(result)
 
+
 @app.route('/api/sessions/<sid>/persons/<int:pid>/clock/<int:cid>', methods=['DELETE'])
 def remove_clock(sid, pid, cid):
     db = get_db()
@@ -310,6 +540,7 @@ def remove_clock(sid, pid, cid):
     result = build_session_dict(db, session)
     db.close()
     return jsonify(result)
+
 
 # --- 额外消费 ---
 
@@ -340,6 +571,7 @@ def add_extra(sid, pid):
     db.close()
     return jsonify(result)
 
+
 @app.route('/api/sessions/<sid>/persons/<int:pid>/extra/<int:eid>', methods=['DELETE'])
 def remove_extra(sid, pid, eid):
     db = get_db()
@@ -350,6 +582,7 @@ def remove_extra(sid, pid, eid):
     result = build_session_dict(db, session)
     db.close()
     return jsonify(result)
+
 
 # --- 账单 ---
 
