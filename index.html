@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TRE 计价器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0f0f0f;
+            --card: #1a1a2e;
+            --card2: #16213e;
+            --accent: #e94560;
+            --accent2: #0f3460;
+            --green: #00d2d3;
+            --gold: #feca57;
+            --text: #eee;
+            --text2: #aaa;
+            --danger: #ff6b6b;
+            --radius: 12px;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg); color: var(--text);
+            min-height: 100vh; padding-bottom: 80px;
+        }
+        .header {
+            background: linear-gradient(135deg, var(--accent2), var(--accent));
+            padding: 14px 16px; text-align: center;
+            position: sticky; top: 0; z-index: 100;
+        }
+        .header h1 { font-size: 20px; font-weight: 700; }
+        .header .subtitle { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+        /* 按钮 */
+        .btn {
+            border: none; border-radius: var(--radius);
+            padding: 7px 12px; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: opacity 0.2s; white-space: nowrap;
+        }
+        .btn:active { opacity: 0.7; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-green { background: var(--green); color: #000; }
+        .btn-blue { background: var(--accent2); color: var(--text); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-gold { background: var(--gold); color: #000; }
+        .btn-sm { padding: 5px 9px; font-size: 11px; border-radius: 8px; }
+        .btn-outline { background: transparent; border: 1px solid var(--accent2); color: var(--text); }
+
+        /* 工具栏 */
+        .toolbar-row {
+            background: var(--card); padding: 8px 12px;
+            display: flex; align-items: center; gap: 6px;
+            border-bottom: 1px solid #333; flex-wrap: wrap;
+        }
+        .toolbar-row select {
+            flex: 1; min-width: 100px;
+            background: var(--card2); color: var(--text);
+            border: 1px solid #444; border-radius: 8px;
+            padding: 7px 8px; font-size: 13px;
+        }
+
+        /* 折扣栏 */
+        .discount-bar {
+            background: var(--card2); padding: 8px 12px;
+            display: flex; align-items: center; gap: 6px;
+            border-bottom: 1px solid #333; flex-wrap: wrap;
+        }
+        .discount-bar label { font-size: 13px; color: var(--text2); }
+        .discount-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+        .discount-chip {
+            background: var(--accent2); color: var(--text);
+            border: 1px solid #444; border-radius: 16px;
+            padding: 4px 12px; font-size: 13px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .discount-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .discount-custom { display: flex; align-items: center; gap: 4px; margin-left: 4px; }
+        .discount-custom input {
+            width: 48px; background: var(--card); color: var(--gold);
+            border: 1px solid #555; border-radius: 6px;
+            padding: 4px 6px; font-size: 14px; text-align: center;
+        }
+        .discount-custom .apply-btn {
+            background: var(--accent2); color: var(--text);
+            border: none; border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer;
+        }
+
+        /* 选人区域 */
+        .pick-section {
+            padding: 10px 12px;
+            border-bottom: 1px solid #222;
+        }
+        .pick-title { font-size: 13px; color: var(--text2); margin-bottom: 8px; font-weight: 600; }
+        .pick-grid {
+            display: flex; flex-wrap: wrap; gap: 8px;
+        }
+        .pick-person {
+            background: var(--card); border: 2px solid #444;
+            border-radius: 12px; padding: 8px 16px;
+            font-size: 15px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+            position: relative; user-select: none;
+        }
+        .pick-person:active { transform: scale(0.95); }
+        .pick-person.selected {
+            background: var(--accent); border-color: var(--accent); color: #fff;
+        }
+        .pick-person .check {
+            position: absolute; top: -4px; right: -4px;
+            background: var(--green); color: #000;
+            width: 18px; height: 18px; border-radius: 50%;
+            display: none; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 800;
+        }
+        .pick-person.selected .check { display: flex; }
+
+        .add-custom-row {
+            display: flex; gap: 6px; margin-top: 8px;
+        }
+        .add-custom-row input {
+            flex: 1; background: var(--card2); color: var(--text);
+            border: 1px solid #444; border-radius: 8px; padding: 6px 10px; font-size: 14px;
+        }
+
+        .pick-actions {
+            display: flex; gap: 6px; margin-top: 8px;
+        }
+
+        /* 客户卡片 */
+        .person-card {
+            background: var(--card); margin: 6px 12px;
+            border-radius: var(--radius); overflow: hidden;
+            border: 1px solid #333;
+        }
+        .person-header {
+            display: flex; align-items: center;
+            padding: 10px 14px; cursor: pointer; gap: 8px;
+        }
+        .person-header .name { flex: 1; font-size: 16px; font-weight: 700; }
+        .person-header .total { font-size: 17px; font-weight: 700; color: var(--gold); }
+        .person-header .toggle { font-size: 13px; color: var(--text2); transition: transform 0.2s; }
+        .person-header .toggle.open { transform: rotate(180deg); }
+        .person-body { display: none; padding: 0 14px 14px; }
+        .person-body.open { display: block; }
+        .section-title { font-size: 12px; font-weight: 600; color: var(--text2); margin: 8px 0 5px; }
+        .fee-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+        .fee-tag {
+            background: var(--accent2); color: var(--green);
+            border-radius: 8px; padding: 3px 9px; font-size: 13px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .fee-tag .del { color: var(--danger); cursor: pointer; font-size: 11px; }
+        .extra-tag {
+            background: #2d1b4e; color: var(--gold);
+            border-radius: 8px; padding: 3px 9px; font-size: 12px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .extra-tag .del { color: var(--danger); cursor: pointer; font-size: 11px; }
+        .add-row { display: flex; gap: 5px; margin-top: 5px; }
+        .add-row input {
+            flex: 1; background: var(--card2); color: var(--text);
+            border: 1px solid #444; border-radius: 8px; padding: 5px 9px; font-size: 13px;
+        }
+        .add-row input.small { width: 65px; flex: none; }
+        .subtotal {
+            font-size: 12px; color: var(--text2);
+            margin-top: 6px; padding-top: 6px; border-top: 1px dashed #444;
+        }
+        .subtotal span { color: var(--green); font-weight: 600; }
+        .subtotal .gold { color: var(--gold); }
+
+        /* 底部总计 */
+        .total-bar {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            border-top: 2px solid var(--accent);
+            padding: 10px 12px;
+            display: flex; align-items: center; z-index: 100; gap: 6px;
+        }
+        .total-bar .label { font-size: 13px; color: var(--text2); }
+        .total-bar .amount {
+            flex: 1; font-size: 26px; font-weight: 800; color: var(--gold); text-align: center;
+        }
+
+        /* 弹窗 */
+        .modal-overlay {
+            display: none; position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); z-index: 200;
+            justify-content: center; align-items: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--card); border-radius: var(--radius);
+            width: 92%; max-width: 500px; max-height: 80vh;
+            overflow-y: auto; padding: 18px;
+        }
+        .modal h2 { margin-bottom: 14px; font-size: 18px; }
+        .modal pre {
+            font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.5;
+            white-space: pre-wrap; color: var(--green);
+            background: var(--bg); padding: 14px; border-radius: 8px;
+        }
+        .modal-btns { display: flex; gap: 8px; margin-top: 14px; }
+        .modal-btns .btn { flex: 1; }
+
+        /* 快照列表 */
+        .snap-item {
+            background: var(--card2); border-radius: 10px;
+            padding: 10px 14px; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .snap-item .snap-info { flex: 1; }
+        .snap-item .snap-label { font-size: 14px; font-weight: 600; }
+        .snap-item .snap-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
+        .snap-item .snap-total { font-size: 16px; font-weight: 700; color: var(--gold); }
+
+        .empty { text-align: center; padding: 30px 16px; color: var(--text2); }
+        .empty .icon { font-size: 40px; margin-bottom: 10px; }
+
+        /* Toast */
+        .toast {
+            position: fixed; top: 70px; left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: var(--green); color: #000;
+            padding: 7px 18px; border-radius: 20px;
+            font-size: 13px; font-weight: 600;
+            opacity: 0; transition: all 0.3s; z-index: 999; pointer-events: none;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.warn { background: var(--gold); }
+        .toast.error { background: var(--danger); color: #fff; }
+
+        /* 新建会话 */
+        .new-session-form {
+            display: none; padding: 10px 12px; gap: 6px;
+            background: var(--card2); border-bottom: 1px solid #333;
+        }
+        .new-session-form.open { display: flex; }
+        .new-session-form input {
+            flex: 1; background: var(--card); color: var(--text);
+            border: 1px solid #444; border-radius: var(--radius);
+            padding: 8px 12px; font-size: 14px;
+        }
+
+        /* 保存快照输入 */
+        .save-snap-row { display: flex; gap: 6px; margin-bottom: 14px; }
+        .save-snap-row input {
+            flex: 1; background: var(--card2); color: var(--text);
+            border: 1px solid #444; border-radius: 8px; padding: 7px 10px; font-size: 13px;
+        }
+
+        /* 隐藏区域 */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>TRE 计价器</h1>
+    <div class="subtitle">卡钟折扣 · 快照备份 · 离线可用</div>
+</div>
+
+<!-- 会话选择 -->
+<div class="toolbar-row">
+    <select id="sessionSelect" onchange="loadSession()">
+        <option value="">-- 选择会话 --</option>
+    </select>
+    <button class="btn btn-sm btn-blue" onclick="showNewSession()">新建</button>
+    <button class="btn btn-sm btn-gold" onclick="showSnapshots()">📁历史</button>
+    <button class="btn btn-sm btn-green" onclick="saveSnapshot()">💾保存</button>
+    <button class="btn btn-sm btn-danger" onclick="resetSession()">🔄重置</button>
+    <button class="btn btn-sm btn-outline" id="restoreBtn" style="display:none" onclick="restoreBackup()">↩️恢复</button>
+    <button class="btn btn-sm btn-danger" onclick="deleteSession()">🗑️</button>
+</div>
+
+<div class="new-session-form" id="newSessionForm">
+    <input type="text" id="newSessionName" placeholder="会话名称"
+           onkeydown="if(event.key==='Enter')createSession()">
+    <button class="btn btn-sm btn-green" onclick="createSession()">创建</button>
+    <button class="btn btn-sm btn-danger" onclick="hideNewSession()">取消</button>
+</div>
+
+<!-- 折扣选择 -->
+<div class="discount-bar" id="discountBar" style="display:none">
+    <label>折扣：</label>
+    <div class="discount-chips" id="discountChips"></div>
+    <div class="discount-custom">
+        <input type="number" id="discountInput" value="75" min="1" max="100">
+        <span style="font-size:13px">%</span>
+        <button class="apply-btn" onclick="setDiscountCustom()">应用</button>
+    </div>
+</div>
+
+<!-- 选人区域 -->
+<div class="pick-section" id="pickSection" style="display:none">
+    <div class="pick-title">👥 选择参战人员（支持2V2多选）</div>
+    <div class="pick-grid" id="pickGrid"></div>
+    <div class="add-custom-row">
+        <input type="text" id="customPersonName" placeholder="自定义姓名"
+               onkeydown="if(event.key==='Enter')addCustomPerson()">
+        <button class="btn btn-sm btn-green" onclick="addCustomPerson()">添加</button>
+    </div>
+    <div class="pick-actions">
+        <button class="btn btn-primary" onclick="addSelectedToBattle()">✅ 加入对战</button>
+    </div>
+</div>
+
+<!-- 对战人员列表 -->
+<div id="personList"></div>
+
+<!-- 底部总计 -->
+<div class="total-bar" id="totalBar" style="display:none">
+    <div class="label">总计</div>
+    <div class="amount" id="grandTotal">¥0</div>
+    <button class="btn btn-sm btn-green" onclick="showReceipt()">📋账单</button>
+</div>
+
+<!-- 账单弹窗 -->
+<div class="modal-overlay" id="receiptModal">
+    <div class="modal">
+        <h2>📋 账单</h2>
+        <pre id="receiptText"></pre>
+        <div class="modal-btns">
+            <button class="btn btn-green" onclick="copyReceipt()">复制</button>
+            <button class="btn btn-blue" onclick="closeModal('receiptModal')">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 快照历史弹窗 -->
+<div class="modal-overlay" id="snapshotModal">
+    <div class="modal">
+        <h2>📁 历史快照</h2>
+        <div class="save-snap-row">
+            <input type="text" id="snapLabelInput" placeholder="快照备注（可选）">
+            <button class="btn btn-sm btn-green" onclick="saveSnapshot();closeModal('snapshotModal')">💾保存当前</button>
+        </div>
+        <div id="snapshotList"></div>
+        <div class="modal-btns" style="margin-top:10px">
+            <button class="btn btn-blue" onclick="closeModal('snapshotModal')">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 导入导出弹窗 -->
+<div class="modal-overlay" id="importExportModal">
+    <div class="modal">
+        <h2>📦 数据管理</h2>
+        <div style="margin-bottom:14px">
+            <button class="btn btn-green" onclick="exportAll()" style="width:100%;margin-bottom:8px">📤 导出全部数据（JSON文件）</button>
+            <button class="btn btn-gold" onclick="document.getElementById('importFile').click()" style="width:100%">📥 导入数据（JSON文件）</button>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importAll(event)">
+        </div>
+        <div class="modal-btns">
+            <button class="btn btn-blue" onclick="closeModal('importExportModal')">关闭</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ 常量 ============
+const STORAGE_KEY = 'tre_calculator';
+const DEFAULT_PERSONS = ['陈', '饭', '肖', '关', '米高', 'ray', '满'];
+const DISCOUNT_PRESETS = [
+    {label:'70折', value:70},
+    {label:'75折', value:75},
+    {label:'80折', value:80},
+    {label:'85折', value:85},
+    {label:'90折', value:90},
+    {label:'全价', value:100},
+];
+
+let currentSessionId = null;
+let currentData = null;
+let selectedPersons = new Set(); // 选人区已选
+
+// ============ 存储层 ============
+function loadStore() {
+    try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {sessions:{}, customPersons: DEFAULT_PERSONS.slice()};
+    } catch(e) {
+        return {sessions:{}, customPersons: DEFAULT_PERSONS.slice()};
+    }
+}
+
+function saveStore(store) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+}
+
+function getStore() { return loadStore(); }
+
+// ============ 工具 ============
+function toast(msg, type='') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    setTimeout(() => el.className = 'toast', 2000);
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function nowStr() {
+    const d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+
+           String(d.getDate()).padStart(2,'0')+' '+
+           String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+// ============ 初始化 ============
+window.onload = () => {
+    refreshSessionList();
+    renderPickGrid();
+};
+
+// ============ 会话管理 ============
+function refreshSessionList() {
+    const store = getStore();
+    const sel = document.getElementById('sessionSelect');
+    const sessions = Object.values(store.sessions).sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
+    sel.innerHTML = '<option value="">-- 选择会话 --</option>';
+    sessions.forEach(s => {
+        const total = calcGrandTotal(s);
+        sel.innerHTML += `<option value="${s.id}">${s.name} (${s.persons.length}人 ¥${total})</option>`;
+    });
+    if (currentSessionId) sel.value = currentSessionId;
+}
+
+function showNewSession() {
+    document.getElementById('newSessionForm').classList.add('open');
+    const today = new Date().toISOString().slice(0,10);
+    document.getElementById('newSessionName').value = today;
+    document.getElementById('newSessionName').focus();
+}
+function hideNewSession() { document.getElementById('newSessionForm').classList.remove('open'); }
+
+function createSession() {
+    const name = document.getElementById('newSessionName').value.trim();
+    if (!name) return;
+    const id = genId();
+    const store = getStore();
+    store.sessions[id] = {
+        id, name, discount: 0.75,
+        createdAt: nowStr(), updatedAt: nowStr(),
+        persons: [], backup: null
+    };
+    saveStore(store);
+    currentSessionId = id;
+    currentData = store.sessions[id];
+    hideNewSession();
+    refreshSessionList();
+    renderAll();
+    toast('会话已创建');
+}
+
+function loadSession() {
+    currentSessionId = document.getElementById('sessionSelect').value;
+    if (!currentSessionId) {
+        currentData = null;
+        renderAll();
+        return;
+    }
+    const store = getStore();
+    currentData = store.sessions[currentSessionId];
+    renderAll();
+}
+
+function deleteSession() {
+    if (!currentSessionId) return;
+    if (!confirm('确定删除此会话？所有数据和快照将删除！')) return;
+    const store = getStore();
+    delete store.sessions[currentSessionId];
+    saveStore(store);
+    currentSessionId = null; currentData = null;
+    refreshSessionList();
+    renderAll();
+    toast('会话已删除');
+}
+
+function resetSession() {
+    if (!currentSessionId) return;
+    if (!confirm('确定重置？数据将自动备份，可点「恢复」找回！')) return;
+    const store = getStore();
+    const s = store.sessions[currentSessionId];
+    // 自动备份
+    s.backup = JSON.parse(JSON.stringify(s.persons));
+    s.persons = [];
+    s.updatedAt = nowStr();
+    saveStore(store);
+    currentData = s;
+    renderAll();
+    refreshSessionList();
+    toast('已重置，可点「恢复」找回', 'warn');
+}
+
+function restoreBackup() {
+    if (!currentSessionId) return;
+    const store = getStore();
+    const s = store.sessions[currentSessionId];
+    if (!s.backup || s.backup.length === 0) {
+        toast('没有可恢复的备份', 'error');
+        return;
+    }
+    s.persons = s.backup;
+    s.backup = null;
+    s.updatedAt = nowStr();
+    saveStore(store);
+    currentData = s;
+    renderAll();
+    refreshSessionList();
+    toast('数据已恢复！');
+}
+
+// ============ 折扣 ============
+function renderDiscountChips(currentDiscount) {
+    const container = document.getElementById('discountChips');
+    const currentPct = Math.round(currentDiscount * 100);
+    container.innerHTML = DISCOUNT_PRESETS.map(p =>
+        `<span class="discount-chip${p.value === currentPct ? ' active' : ''}"
+              onclick="setDiscount(${p.value})">${p.label}</span>`
+    ).join('');
+    document.getElementById('discountInput').value = currentPct;
+}
+
+function setDiscount(pct) {
+    if (!currentSessionId) return;
+    const store = getStore();
+    store.sessions[currentSessionId].discount = pct / 100;
+    store.sessions[currentSessionId].updatedAt = nowStr();
+    saveStore(store);
+    currentData = store.sessions[currentSessionId];
+    renderAll();
+}
+
+function setDiscountCustom() {
+    const val = parseInt(document.getElementById('discountInput').value);
+    if (val >= 1 && val <= 100) setDiscount(val);
+}
+
+// ============ 选人 ============
+function renderPickGrid() {
+    const store = getStore();
+    const persons = store.customPersons || DEFAULT_PERSONS.slice();
+    const grid = document.getElementById('pickGrid');
+    grid.innerHTML = persons.map(name =>
+        `<div class="pick-person${selectedPersons.has(name) ? ' selected' : ''}" onclick="togglePickPerson('${esc(name)}')">
+            <span class="check">✓</span>${esc(name)}
+        </div>`
+    ).join('');
+}
+
+function togglePickPerson(name) {
+    if (selectedPersons.has(name)) {
+        selectedPersons.delete(name);
+    } else {
+        selectedPersons.add(name);
+    }
+    renderPickGrid();
+}
+
+function addCustomPerson() {
+    const input = document.getElementById('customPersonName');
+    const name = input.value.trim();
+    if (!name) return;
+    const store = getStore();
+    if (!store.customPersons) store.customPersons = DEFAULT_PERSONS.slice();
+    if (!store.customPersons.includes(name)) {
+        store.customPersons.push(name);
+        saveStore(store);
+    }
+    selectedPersons.add(name);
+    input.value = '';
+    renderPickGrid();
+    toast(`已添加：${name}`);
+}
+
+function addSelectedToBattle() {
+    if (!currentSessionId) { toast('请先创建或选择会话', 'warn'); return; }
+    if (selectedPersons.size === 0) { toast('请选择至少一人', 'warn'); return; }
+    const store = getStore();
+    const s = store.sessions[currentSessionId];
+    // 避免重复添加
+    const existNames = s.persons.map(p => p.name);
+    let added = 0;
+    selectedPersons.forEach(name => {
+        if (!existNames.includes(name)) {
+            s.persons.push({ id: genId(), name, clockFees: [], extraItems: [] });
+            added++;
+        }
+    });
+    s.updatedAt = nowStr();
+    saveStore(store);
+    currentData = s;
+    selectedPersons.clear();
+    renderPickGrid();
+    renderAll();
+    refreshSessionList();
+    toast(`已加入${added}人`);
+}
+
+// ============ 计算引擎 ============
+function calcPersonTotal(p, discount) {
+    const clockTotal = p.clockFees.reduce((s,c) => s + c.fee, 0);
+    const clockDiscounted = Math.round(clockTotal * discount * 100) / 100;
+    const extraTotal = p.extraItems.reduce((s,e) => s + e.price, 0);
+    const total = Math.round((clockDiscounted + extraTotal) * 100) / 100;
+    return { clockTotal, clockDiscounted, extraTotal, total };
+}
+
+function calcGrandTotal(session) {
+    return session.persons.reduce((s, p) => s + calcPersonTotal(p, session.discount).total, 0);
+}
+
+// ============ 渲染 ============
+function renderAll() {
+    const hasSession = currentSessionId && currentData;
+    document.getElementById('discountBar').style.display = hasSession ? 'flex' : 'none';
+    document.getElementById('pickSection').style.display = hasSession ? 'block' : 'none';
+    document.getElementById('totalBar').style.display = hasSession ? 'flex' : 'none';
+
+    if (!hasSession) {
+        document.getElementById('personList').innerHTML = '';
+        return;
+    }
+
+    const s = currentData;
+    renderDiscountChips(s.discount);
+
+    // 恢复按钮
+    document.getElementById('restoreBtn').style.display = s.backup && s.backup.length ? 'inline-block' : 'none';
+
+    // 总计
+    const grandTotal = calcGrandTotal(s);
+    document.getElementById('grandTotal').textContent = `¥${grandTotal}`;
+
+    // 人员列表
+    const list = document.getElementById('personList');
+    if (!s.persons.length) {
+        list.innerHTML = '<div class="empty"><div class="icon">👥</div>从上方选择人员加入对战</div>';
+        return;
+    }
+
+    const discountPct = Math.round(s.discount * 100);
+    list.innerHTML = s.persons.map(p => {
+        const t = calcPersonTotal(p, s.discount);
+        return `
+        <div class="person-card">
+            <div class="person-header" onclick="togglePerson('${p.id}')">
+                <span class="name">${esc(p.name)}</span>
+                <span class="total">¥${t.total}</span>
+                <span class="toggle" id="toggle-${p.id}">▼</span>
+            </div>
+            <div class="person-body" id="body-${p.id}">
+                <div class="section-title">🕐 卡钟（${discountPct}%折扣）</div>
+                <div class="fee-tags">
+                    ${p.clockFees.map((c,i) => `<span class="fee-tag">${c.fee}<span class="del" onclick="removeClock('${p.id}',${i})">✕</span></span>`).join('')}
+                </div>
+                <div class="add-row">
+                    <input type="number" id="clock-input-${p.id}" placeholder="金额" step="0.01"
+                           onkeydown="if(event.key==='Enter')addClock('${p.id}')">
+                    <button class="btn btn-sm btn-green" onclick="addClock('${p.id}')">添加</button>
+                </div>
+                <div class="subtotal">
+                    卡钟合计：<span>¥${t.clockTotal}</span> → ${discountPct}%折：<span class="gold">¥${t.clockDiscounted}</span>
+                </div>
+
+                <div class="section-title">🍺 额外消费（原价）</div>
+                <div class="fee-tags">
+                    ${p.extraItems.map((e,i) => `<span class="extra-tag">${esc(e.name)} ¥${e.price}<span class="del" onclick="removeExtra('${p.id}',${i})">✕</span></span>`).join('')}
+                </div>
+                <div class="add-row">
+                    <input type="text" id="extra-name-${p.id}" placeholder="名称" style="flex:1">
+                    <input type="number" id="extra-price-${p.id}" placeholder="金额" class="small" step="0.01"
+                           onkeydown="if(event.key==='Enter')addExtra('${p.id}')">
+                    <button class="btn btn-sm btn-gold" onclick="addExtra('${p.id}')">添加</button>
+                </div>
+                ${p.extraItems.length ? `<div class="subtotal">额外小计：<span class="gold">¥${t.extraTotal}</span></div>` : ''}
+
+                <div style="margin-top:10px;text-align:right">
+                    <button class="btn btn-sm btn-danger" onclick="removePerson('${p.id}')">删除 ${esc(p.name)}</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function togglePerson(pid) {
+    const body = document.getElementById(`body-${pid}`);
+    const toggle = document.getElementById(`toggle-${pid}`);
+    body.classList.toggle('open');
+    toggle.classList.toggle('open');
+}
+
+// ============ CRUD操作 ============
+function addClock(pid) {
+    const input = document.getElementById(`clock-input-${pid}`);
+    const fee = parseFloat(input.value);
+    if (!fee || fee <= 0) return;
+    const store = getStore();
+    const p = store.sessions[currentSessionId].persons.find(x => x.id === pid);
+    if (!p) return;
+    p.clockFees.push({ fee });
+    store.sessions[currentSessionId].updatedAt = nowStr();
+    saveStore(store);
+    currentData = store.sessions[currentSessionId];
+    renderAll();
+    refreshSessionList();
+}
+
+function removeClock(pid, idx) {
+    const store = getStore();
+    const p = store.sessions[currentSessionId].persons.find(x => x.id === pid);
+    if (!p) return;
+    p.clockFees.splice(idx, 1);
+    store.sessions[currentSessionId].updatedAt = nowStr();
+    saveStore(store);
+    currentData = store.sessions[currentSessionId];
+    renderAll();
+    refreshSessionList();
+}
+
+function addExtra(pid) {
+    const name = document.getElementById(`extra-name-${pid}`).value.trim();
+    const price = parseFloat(document.getElementById(`extra-price-${pid}`).value);
+    if (!name || !price || price <= 0) return;
+    const store = getStore();
+    const p = store.sessions[currentSessionId].persons.find(x => x.id === pid);
+    if (!p) return;
+    p.extraItems.push({ name, price });
+    store.sessions[currentSessionId].updatedAt = nowStr();
+    saveStore(store);
+    currentData = store.sessions[currentSessionId];
+    renderAll();
+    refreshSessionList();
+}
+
+function removeExtra(pid, idx) {
+    const store = getStore();
+    const p = store.sessions[currentSessionId].persons.find(x => x.id === pid);
+    if (!p) return;
+    p.extraItems.splice(idx, 1);
+    store.sessions[currentSessionId].updatedAt = nowStr();
+    saveStore(store);
+    currentData = store.sessions[currentSessionId];
+    renderAll();
+    refreshSessionList();
+}
+
+function removePerson(pid) {
+    if (!confirm('确定删除此客户？')) return;
+    const store = getStore();
+    const s = store.sessions[currentSessionId];
+    s.persons = s.persons.filter(x => x.id !== pid);
+    s.updatedAt = nowStr();
+    saveStore(store);
+    currentData = s;
+    renderAll();
+    refreshSessionList();
+}
+
+// ============ 账单 ============
+function showReceipt() {
+    if (!currentSessionId) return;
+    const s = currentData;
+    const discountPct = Math.round(s.discount * 100);
+    let lines = [];
+    lines.push('='.repeat(50));
+    lines.push(`  ${s.name}`);
+    lines.push(`  ${s.createdAt}`);
+    lines.push('='.repeat(50));
+    lines.push('');
+
+    let clockAll = 0, clockDiscAll = 0, extraAll = 0;
+    s.persons.forEach(p => {
+        const t = calcPersonTotal(p, s.discount);
+        clockAll += t.clockTotal;
+        clockDiscAll += t.clockDiscounted;
+        extraAll += t.extraTotal;
+        lines.push(`【${p.name}】`);
+        if (p.clockFees.length) {
+            const feeStr = p.clockFees.map(c => c.fee).join(' + ');
+            lines.push(`  卡钟：${feeStr} = ${t.clockTotal}`);
+            lines.push(`  卡钟${discountPct}%折：${t.clockTotal} × ${s.discount} = ${t.clockDiscounted}`);
+        }
+        if (p.extraItems.length) {
+            lines.push(`  额外消费：`);
+            p.extraItems.forEach(e => lines.push(`    - ${e.name}：${e.price}`));
+            lines.push(`  额外小计：${t.extraTotal}`);
+        }
+        lines.push(`  >>> 个人合计：${t.total}`);
+        lines.push('');
+    });
+
+    lines.push('-'.repeat(50));
+    lines.push(`  卡钟总计（未打折）：${Math.round(clockAll*100)/100}`);
+    lines.push(`  卡钟${discountPct}%折：${Math.round(clockDiscAll*100)/100}`);
+    lines.push(`  额外消费总计：${Math.round(extraAll*100)/100}`);
+    lines.push('='.repeat(50));
+    lines.push(`  ★ 总计：${calcGrandTotal(s)} ★`);
+    lines.push('='.repeat(50));
+
+    document.getElementById('receiptText').textContent = lines.join('\n');
+    document.getElementById('receiptModal').classList.add('open');
+}
+
+function copyReceipt() {
+    navigator.clipboard.writeText(document.getElementById('receiptText').textContent)
+        .then(() => toast('已复制'));
+}
+
+// ============ 快照 ============
+function saveSnapshot() {
+    if (!currentSessionId) { toast('请先选择会话', 'warn'); return; }
+    const label = document.getElementById('snapLabelInput')?.value?.trim() || nowStr();
+    const store = getStore();
+    const s = store.sessions[currentSessionId];
+    if (!s.snapshots) s.snapshots = [];
+    s.snapshots.push({
+        id: genId(),
+        label,
+        data: JSON.parse(JSON.stringify(s.persons)),
+        discount: s.discount,
+        createdAt: nowStr()
+    });
+    s.updatedAt = nowStr();
+    saveStore(store);
+    currentData = s;
+    toast(`已保存快照：${label}`);
+    const inp = document.getElementById('snapLabelInput');
+    if (inp) inp.value = '';
+}
+
+function showSnapshots() {
+    if (!currentSessionId) { toast('请先选择会话', 'warn'); return; }
+    const s = currentData;
+    const snapshots = s.snapshots || [];
+    const container = document.getElementById('snapshotList');
+    if (!snapshots.length) {
+        container.innerHTML = '<div class="empty" style="padding:20px"><div class="icon">📁</div>暂无快照<br>点击「💾保存当前」保存数据</div>';
+    } else {
+        container.innerHTML = snapshots.slice().reverse().map(snap => {
+            const total = snap.data.reduce((s, p) => s + calcPersonTotal(p, snap.discount).total, 0);
+            return `
+            <div class="snap-item">
+                <div class="snap-info">
+                    <div class="snap-label">${esc(snap.label)}</div>
+                    <div class="snap-meta">${snap.createdAt} | ${snap.data.length}人 | 折扣${Math.round(snap.discount*100)}%</div>
+                </div>
+                <div class="snap-total">¥${Math.round(total*100)/100}</div>
+                <button class="btn btn-sm btn-green" onclick="restoreSnapshot('${snap.id}')">恢复</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteSnapshot('${snap.id}')">删除</button>
+            </div>`;
+        }).join('');
+    }
+    document.getElementById('snapshotModal').classList.add('open');
+}
+
+function restoreSnapshot(snapId) {
+    if (!confirm('恢复此快照将覆盖当前数据，确定？')) return;
+    const store = getStore();
+    const s = store.sessions[currentSessionId];
+    const snap = s.snapshots.find(x => x.id === snapId);
+    if (!snap) return;
+    s.persons = JSON.parse(JSON.stringify(snap.data));
+    s.discount = snap.discount;
+    s.updatedAt = nowStr();
+    saveStore(store);
+    currentData = s;
+    renderAll();
+    refreshSessionList();
+    closeModal('snapshotModal');
+    toast('快照已恢复！');
+}
+
+function deleteSnapshot(snapId) {
+    if (!confirm('确定删除此快照？')) return;
+    const store = getStore();
+    const s = store.sessions[currentSessionId];
+    s.snapshots = (s.snapshots || []).filter(x => x.id !== snapId);
+    s.updatedAt = nowStr();
+    saveStore(store);
+    currentData = s;
+    showSnapshots();
+}
+
+// ============ 导入导出 ============
+function exportAll() {
+    const store = getStore();
+    const blob = new Blob([JSON.stringify(store, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tre_calculator_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('数据已导出！');
+}
+
+function importAll(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.sessions) throw new Error('格式错误');
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            currentSessionId = null; currentData = null;
+            refreshSessionList();
+            renderAll();
+            toast('数据已导入！');
+        } catch(err) {
+            toast('导入失败：文件格式错误', 'error');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+// ============ 弹窗 ============
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+}
+
+document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('click', e => {
+        if (e.target === el) el.classList.remove('open');
+    });
+});
+</script>
+
+</body>
+</html>
