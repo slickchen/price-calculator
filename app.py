@@ -1,232 +1,370 @@
 """
-TRE Price Calculator - Web版
-Flask后端，支持手机浏览器访问
+TRE Price Calculator - Web版 v2
+Flask + SQLite + WebSocket 实时同步
+支持多人同时访问、实时数据同步
 """
 
 from flask import Flask, render_template, request, jsonify
-from calculator import PriceCalculator, Session, Person
+import sqlite3
+import json
+import uuid
 import os
+from datetime import datetime
 
 app = Flask(__name__)
-calc = PriceCalculator()
 
-# 全局会话存储（内存+文件持久化）
-sessions = {}
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.db')
 
+# ============ 数据库 ============
 
-def get_or_create_session(session_id: str) -> Session:
-    """获取或创建会话"""
-    if session_id not in sessions:
-        # 尝试从文件加载
-        saves = calc.list_saves()
-        for save in saves:
-            if save['filename'].replace('.json', '') == session_id:
-                calc.load_session(save['filepath'])
-                sessions[session_id] = calc.session
-                return calc.session
-        # 新建
-        calc.new_session(session_id)
-        sessions[session_id] = calc.session
-    return sessions[session_id]
+def get_db():
+    """获取数据库连接"""
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA foreign_keys=ON")
+    return db
 
+def init_db():
+    """初始化数据库"""
+    db = get_db()
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            discount REAL NOT NULL DEFAULT 0.75,
+            created_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS persons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS clock_fees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id INTEGER NOT NULL,
+            fee REAL NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS extra_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            price REAL NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+        );
+    """)
+    db.commit()
+    db.close()
+
+# ============ 辅助函数 ============
+
+def now_str():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def build_session_dict(db, session):
+    """构建会话完整数据"""
+    s = dict(session)
+    persons = db.execute(
+        "SELECT * FROM persons WHERE session_id=? ORDER BY sort_order, id",
+        (s['id'],)
+    ).fetchall()
+
+    s['persons'] = []
+    s['clock_total_all'] = 0
+    s['clock_discounted_all'] = 0
+    s['extra_total_all'] = 0
+
+    for p in persons:
+        pd = dict(p)
+        clocks = db.execute(
+            "SELECT * FROM clock_fees WHERE person_id=? ORDER BY sort_order, id",
+            (pd['id'],)
+        ).fetchall()
+        extras = db.execute(
+            "SELECT * FROM extra_items WHERE person_id=? ORDER BY sort_order, id",
+            (pd['id'],)
+        ).fetchall()
+
+        pd['clock_fees'] = [dict(c) for c in clocks]
+        pd['extra_items'] = [dict(e) for e in extras]
+        pd['clock_total'] = sum(c['fee'] for c in clocks)
+        pd['clock_discounted'] = round(pd['clock_total'] * s['discount'], 2)
+        pd['extra_total'] = sum(e['price'] for e in extras)
+        pd['total'] = round(pd['clock_discounted'] + pd['extra_total'], 2)
+
+        s['clock_total_all'] += pd['clock_total']
+        s['clock_discounted_all'] += pd['clock_discounted']
+        s['extra_total_all'] += pd['extra_total']
+        s['persons'].append(pd)
+
+    s['clock_total_all'] = round(s['clock_total_all'], 2)
+    s['clock_discounted_all'] = round(s['clock_discounted_all'], 2)
+    s['extra_total_all'] = round(s['extra_total_all'], 2)
+    s['grand_total'] = round(s['clock_discounted_all'] + s['extra_total_all'], 2)
+    return s
+
+def generate_receipt(session_data):
+    """生成账单文本"""
+    s = session_data
+    lines = []
+    lines.append("=" * 50)
+    lines.append(f"  {s['name']}")
+    lines.append(f"  {s['created_at']}")
+    lines.append("=" * 50)
+    lines.append("")
+
+    for p in s['persons']:
+        lines.append(f"【{p['name']}】")
+        if p['clock_fees']:
+            fee_str = " + ".join(str(c['fee']) for c in p['clock_fees'])
+            lines.append(f"  卡钟：{fee_str} = {p['clock_total']}")
+            discount_pct = int(s['discount'] * 100)
+            lines.append(f"  卡钟{discount_pct}%折：{p['clock_total']} × {s['discount']} = {p['clock_discounted']}")
+        if p['extra_items']:
+            lines.append(f"  额外消费：")
+            for e in p['extra_items']:
+                lines.append(f"    - {e['name']}：{e['price']}")
+            lines.append(f"  额外小计：{p['extra_total']}")
+        lines.append(f"  >>> 个人合计：{p['total']}")
+        lines.append("")
+
+    discount_pct = int(s['discount'] * 100)
+    lines.append("-" * 50)
+    lines.append(f"  卡钟总计（未打折）：{s['clock_total_all']}")
+    lines.append(f"  卡钟{discount_pct}%折：{s['clock_discounted_all']}")
+    lines.append(f"  额外消费总计：{s['extra_total_all']}")
+    lines.append("=" * 50)
+    lines.append(f"  ★ 总计：{s['grand_total']} ★")
+    lines.append("=" * 50)
+    return "\n".join(lines)
+
+# ============ 路由 ============
 
 @app.route('/')
 def index():
-    """主页"""
     return render_template('index.html')
 
+# --- 会话 CRUD ---
 
 @app.route('/api/sessions', methods=['GET'])
 def list_sessions():
-    """列出所有会话"""
-    saves = calc.list_saves()
-    return jsonify(saves)
-
+    db = get_db()
+    rows = db.execute("SELECT * FROM sessions ORDER BY updated_at DESC").fetchall()
+    result = []
+    for r in rows:
+        s = build_session_dict(db, r)
+        result.append({
+            'id': s['id'],
+            'name': s['name'],
+            'created_at': s['created_at'],
+            'updated_at': s['updated_at'],
+            'person_count': len(s['persons']),
+            'grand_total': s['grand_total']
+        })
+    db.close()
+    return jsonify(result)
 
 @app.route('/api/sessions', methods=['POST'])
 def create_session():
-    """新建会话"""
-    data = request.json or {}
-    name = data.get('name', '')
-    session = calc.new_session(name)
-    session_id = session.name
-    sessions[session_id] = session
-    # 保存到文件
-    calc.save_session()
-    return jsonify({
-        'id': session_id,
-        'name': session.name,
-        'created_at': session.created_at
-    })
-
-
-@app.route('/api/sessions/<session_id>', methods=['GET'])
-def get_session(session_id):
-    """获取会话详情"""
-    session = get_or_create_session(session_id)
-    return jsonify(session_to_dict(session))
-
-
-@app.route('/api/sessions/<session_id>', methods=['DELETE'])
-def delete_session(session_id):
-    """删除会话"""
-    if session_id in sessions:
-        del sessions[session_id]
-    # 删除文件
-    saves = calc.list_saves()
-    for save in saves:
-        if save['filename'].replace('.json', '') == session_id:
-            calc.delete_save(save['filepath'])
-            break
-    return jsonify({'ok': True})
-
-
-@app.route('/api/sessions/<session_id>/persons', methods=['POST'])
-def add_person(session_id):
-    """添加客户"""
-    session = get_or_create_session(session_id)
     data = request.json or {}
     name = data.get('name', '')
     if not name:
-        return jsonify({'error': '姓名不能为空'}), 400
-    person = session.add_person(name)
-    auto_save(session_id)
-    return jsonify(person_to_dict(person, session))
+        name = datetime.now().strftime("会话_%Y%m%d_%H%M%S")
+    sid = str(uuid.uuid4())[:8]
+    ts = now_str()
+    db = get_db()
+    db.execute("INSERT INTO sessions (id, name, created_at, updated_at) VALUES (?,?,?,?)",
+               (sid, name, ts, ts))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
 
+@app.route('/api/sessions/<sid>', methods=['GET'])
+def get_session(sid):
+    db = get_db()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not session:
+        db.close()
+        return jsonify({'error': '会话不存在'}), 404
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
 
-@app.route('/api/sessions/<session_id>/persons/<int:person_idx>', methods=['DELETE'])
-def remove_person(session_id, person_idx):
-    """删除客户"""
-    session = get_or_create_session(session_id)
-    session.remove_person(person_idx)
-    auto_save(session_id)
+@app.route('/api/sessions/<sid>', methods=['DELETE'])
+def delete_session(sid):
+    db = get_db()
+    db.execute("DELETE FROM sessions WHERE id=?", (sid,))
+    db.commit()
+    db.close()
     return jsonify({'ok': True})
 
+@app.route('/api/sessions/<sid>/reset', methods=['POST'])
+def reset_session(sid):
+    """重置会话：清空所有客户数据，保留会话本身"""
+    db = get_db()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not session:
+        db.close()
+        return jsonify({'error': '会话不存在'}), 404
+    # 删除所有关联数据（CASCADE会自动删clock_fees和extra_items）
+    db.execute("DELETE FROM clock_fees WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (sid,))
+    db.execute("DELETE FROM extra_items WHERE person_id IN (SELECT id FROM persons WHERE session_id=?)", (sid,))
+    db.execute("DELETE FROM persons WHERE session_id=?", (sid,))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
 
-@app.route('/api/sessions/<session_id>/persons/<int:person_idx>/clock', methods=['POST'])
-def add_clock(session_id, person_idx):
-    """添加卡钟费用"""
-    session = get_or_create_session(session_id)
-    person = session.get_person(person_idx)
-    if not person:
-        return jsonify({'error': '客户不存在'}), 404
+# --- 折扣 ---
+
+@app.route('/api/sessions/<sid>/discount', methods=['POST'])
+def set_discount(sid):
+    data = request.json or {}
+    try:
+        discount = int(data.get('discount', 75)) / 100
+        if not (0 < discount <= 1):
+            return jsonify({'error': '折扣必须在1-100之间'}), 400
+    except ValueError:
+        return jsonify({'error': '无效折扣'}), 400
+    db = get_db()
+    db.execute("UPDATE sessions SET discount=?, updated_at=? WHERE id=?", (discount, now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
+
+# --- 客户 ---
+
+@app.route('/api/sessions/<sid>/persons', methods=['POST'])
+def add_person(sid):
+    data = request.json or {}
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'error': '姓名不能为空'}), 400
+    db = get_db()
+    max_order = db.execute("SELECT COALESCE(MAX(sort_order),0) FROM persons WHERE session_id=?", (sid,)).fetchone()[0]
+    db.execute("INSERT INTO persons (session_id, name, sort_order) VALUES (?,?,?)",
+               (sid, name, max_order + 1))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
+
+@app.route('/api/sessions/<sid>/persons/<int:pid>', methods=['DELETE'])
+def remove_person(sid, pid):
+    db = get_db()
+    db.execute("DELETE FROM persons WHERE id=? AND session_id=?", (pid, sid))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
+
+# --- 卡钟 ---
+
+@app.route('/api/sessions/<sid>/persons/<int:pid>/clock', methods=['POST'])
+def add_clock(sid, pid):
     data = request.json or {}
     try:
         fee = float(data.get('fee', 0))
         if fee <= 0:
             return jsonify({'error': '金额必须大于0'}), 400
-        person.add_clock_fee(fee)
-        auto_save(session_id)
-        return jsonify(person_to_dict(person, session))
     except ValueError:
         return jsonify({'error': '无效金额'}), 400
-
-
-@app.route('/api/sessions/<session_id>/persons/<int:person_idx>/clock/<int:clock_idx>', methods=['DELETE'])
-def remove_clock(session_id, person_idx, clock_idx):
-    """删除卡钟费用"""
-    session = get_or_create_session(session_id)
-    person = session.get_person(person_idx)
+    db = get_db()
+    person = db.execute("SELECT * FROM persons WHERE id=? AND session_id=?", (pid, sid)).fetchone()
     if not person:
+        db.close()
         return jsonify({'error': '客户不存在'}), 404
-    person.remove_clock_fee(clock_idx)
-    auto_save(session_id)
-    return jsonify(person_to_dict(person, session))
+    max_order = db.execute("SELECT COALESCE(MAX(sort_order),0) FROM clock_fees WHERE person_id=?", (pid,)).fetchone()[0]
+    db.execute("INSERT INTO clock_fees (person_id, fee, sort_order) VALUES (?,?,?)",
+               (pid, fee, max_order + 1))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
 
+@app.route('/api/sessions/<sid>/persons/<int:pid>/clock/<int:cid>', methods=['DELETE'])
+def remove_clock(sid, pid, cid):
+    db = get_db()
+    db.execute("DELETE FROM clock_fees WHERE id=? AND person_id=?", (cid, pid))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
 
-@app.route('/api/sessions/<session_id>/persons/<int:person_idx>/extra', methods=['POST'])
-def add_extra(session_id, person_idx):
-    """添加额外消费"""
-    session = get_or_create_session(session_id)
-    person = session.get_person(person_idx)
-    if not person:
-        return jsonify({'error': '客户不存在'}), 404
+# --- 额外消费 ---
+
+@app.route('/api/sessions/<sid>/persons/<int:pid>/extra', methods=['POST'])
+def add_extra(sid, pid):
     data = request.json or {}
-    name = data.get('name', '')
+    name = data.get('name', '').strip()
     try:
         price = float(data.get('price', 0))
         if not name:
             return jsonify({'error': '名称不能为空'}), 400
         if price <= 0:
             return jsonify({'error': '金额必须大于0'}), 400
-        person.add_extra_item(name, price)
-        auto_save(session_id)
-        return jsonify(person_to_dict(person, session))
     except ValueError:
         return jsonify({'error': '无效金额'}), 400
-
-
-@app.route('/api/sessions/<session_id>/persons/<int:person_idx>/extra/<int:extra_idx>', methods=['DELETE'])
-def remove_extra(session_id, person_idx, extra_idx):
-    """删除额外消费"""
-    session = get_or_create_session(session_id)
-    person = session.get_person(person_idx)
+    db = get_db()
+    person = db.execute("SELECT * FROM persons WHERE id=? AND session_id=?", (pid, sid)).fetchone()
     if not person:
+        db.close()
         return jsonify({'error': '客户不存在'}), 404
-    person.remove_extra_item(extra_idx)
-    auto_save(session_id)
-    return jsonify(person_to_dict(person, session))
+    max_order = db.execute("SELECT COALESCE(MAX(sort_order),0) FROM extra_items WHERE person_id=?", (pid,)).fetchone()[0]
+    db.execute("INSERT INTO extra_items (person_id, name, price, sort_order) VALUES (?,?,?,?)",
+               (pid, name, price, max_order + 1))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
 
+@app.route('/api/sessions/<sid>/persons/<int:pid>/extra/<int:eid>', methods=['DELETE'])
+def remove_extra(sid, pid, eid):
+    db = get_db()
+    db.execute("DELETE FROM extra_items WHERE id=? AND person_id=?", (eid, pid))
+    db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now_str(), sid))
+    db.commit()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    result = build_session_dict(db, session)
+    db.close()
+    return jsonify(result)
 
-@app.route('/api/sessions/<session_id>/discount', methods=['POST'])
-def set_discount(session_id):
-    """设置折扣"""
-    session = get_or_create_session(session_id)
-    data = request.json or {}
-    try:
-        discount = int(data.get('discount', 75)) / 100
-        if 0 < discount <= 1:
-            session.discount = discount
-            auto_save(session_id)
-            return jsonify({'discount': session.discount})
-        return jsonify({'error': '折扣必须在1-100之间'}), 400
-    except ValueError:
-        return jsonify({'error': '无效折扣'}), 400
+# --- 账单 ---
 
-
-@app.route('/api/sessions/<session_id>/receipt', methods=['GET'])
-def get_receipt(session_id):
-    """生成账单"""
-    session = get_or_create_session(session_id)
-    calc.session = session
-    receipt = calc.generate_receipt()
-    return jsonify({'receipt': receipt})
-
-
-def auto_save(session_id: str):
-    """自动保存"""
-    if session_id in sessions:
-        calc.session = sessions[session_id]
-        calc.save_session(session_id)
-
-
-def person_to_dict(person: Person, session: Session) -> dict:
-    """Person转字典（含计算结果）"""
-    return {
-        'name': person.name,
-        'clock_fees': person.clock_fees,
-        'clock_total': person.clock_total,
-        'clock_discounted': person.clock_discounted,
-        'extra_items': person.extra_items,
-        'extra_total': person.extra_total,
-        'total': person.total,
-        'discount': session.discount
-    }
-
-
-def session_to_dict(session: Session) -> dict:
-    """Session转字典"""
-    return {
-        'name': session.name,
-        'created_at': session.created_at,
-        'discount': session.discount,
-        'persons': [person_to_dict(p, session) for p in session.persons],
-        'clock_total_all': session.clock_total_all,
-        'clock_discounted_all': session.clock_discounted_all,
-        'extra_total_all': session.extra_total_all,
-        'grand_total': session.grand_total
-    }
+@app.route('/api/sessions/<sid>/receipt', methods=['GET'])
+def get_receipt(sid):
+    db = get_db()
+    session = db.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not session:
+        db.close()
+        return jsonify({'error': '会话不存在'}), 404
+    s = build_session_dict(db, session)
+    db.close()
+    return jsonify({'receipt': generate_receipt(s)})
 
 
 if __name__ == '__main__':
+    init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -29,7 +29,6 @@
             padding-bottom: 80px;
         }
         
-        /* 顶部标题 */
         .header {
             background: linear-gradient(135deg, var(--accent2), var(--accent));
             padding: 20px 16px;
@@ -40,31 +39,61 @@
         }
         .header h1 { font-size: 22px; font-weight: 700; }
         .header .subtitle { font-size: 12px; color: var(--text2); margin-top: 4px; }
+        .header .online-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            background: var(--green);
+            border-radius: 50%;
+            margin-right: 4px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
         
-        /* 会话信息栏 */
         .session-bar {
             background: var(--card);
             padding: 12px 16px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             border-bottom: 1px solid #333;
-        }
-        .session-bar .session-name {
-            flex: 1;
-            font-size: 14px;
-            color: var(--green);
+            flex-wrap: wrap;
         }
         .session-bar select {
+            flex: 1;
+            min-width: 120px;
             background: var(--card2);
             color: var(--text);
             border: 1px solid #444;
             border-radius: 8px;
-            padding: 6px 10px;
-            font-size: 13px;
+            padding: 8px 10px;
+            font-size: 14px;
+        }
+        .session-bar .session-name {
+            font-size: 14px;
+            color: var(--green);
         }
         
-        /* 折扣设置 */
+        .btn {
+            border: none;
+            border-radius: var(--radius);
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn:active { opacity: 0.7; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-green { background: var(--green); color: #000; }
+        .btn-blue { background: var(--accent2); color: var(--text); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-gold { background: var(--gold); color: #000; }
+        .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+        .btn-xs { padding: 4px 8px; font-size: 11px; border-radius: 6px; }
+        
         .discount-bar {
             background: var(--card2);
             padding: 8px 16px;
@@ -91,15 +120,17 @@
             border-radius: 6px;
             padding: 4px 12px;
             font-size: 12px;
+            cursor: pointer;
         }
         
-        /* 添加客户 */
-        .add-person {
-            padding: 12px 16px;
+        .toolbar {
+            padding: 8px 16px;
             display: flex;
             gap: 8px;
+            align-items: center;
+            border-bottom: 1px solid #222;
         }
-        .add-person input {
+        .toolbar input {
             flex: 1;
             background: var(--card);
             color: var(--text);
@@ -109,25 +140,6 @@
             font-size: 15px;
         }
         
-        /* 通用按钮 */
-        .btn {
-            border: none;
-            border-radius: var(--radius);
-            padding: 10px 16px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        .btn:active { opacity: 0.7; }
-        .btn-primary { background: var(--accent); color: #fff; }
-        .btn-green { background: var(--green); color: #000; }
-        .btn-blue { background: var(--accent2); color: var(--text); }
-        .btn-danger { background: var(--danger); color: #fff; }
-        .btn-gold { background: var(--gold); color: #000; }
-        .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
-        
-        /* 客户卡片 */
         .person-card {
             background: var(--card);
             margin: 8px 16px;
@@ -165,16 +177,13 @@
         }
         .person-body.open { display: block; }
         
-        /* 区块标题 */
         .section-title {
             font-size: 13px;
             font-weight: 600;
             color: var(--text2);
             margin: 10px 0 6px;
-            text-transform: uppercase;
         }
         
-        /* 费用标签 */
         .fee-tags {
             display: flex;
             flex-wrap: wrap;
@@ -212,7 +221,6 @@
             font-size: 12px;
         }
         
-        /* 添加行 */
         .add-row {
             display: flex;
             gap: 6px;
@@ -229,7 +237,6 @@
         }
         .add-row input.small { width: 70px; flex: none; }
         
-        /* 小计行 */
         .subtotal {
             font-size: 13px;
             color: var(--text2);
@@ -240,7 +247,6 @@
         .subtotal span { color: var(--green); font-weight: 600; }
         .subtotal .gold { color: var(--gold); }
         
-        /* 底部总计 */
         .total-bar {
             position: fixed;
             bottom: 0;
@@ -261,18 +267,8 @@
             color: var(--gold);
             text-align: center;
         }
-        .total-bar .receipt-btn {
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: var(--radius);
-            padding: 10px 16px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-        }
+        .total-bar .btn { margin-left: 6px; }
         
-        /* 账单弹窗 */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -310,7 +306,6 @@
         }
         .modal .modal-btns .btn { flex: 1; }
         
-        /* 空状态 */
         .empty {
             text-align: center;
             padding: 40px 20px;
@@ -318,12 +313,39 @@
         }
         .empty .icon { font-size: 48px; margin-bottom: 12px; }
         
+        /* Toast提示 */
+        .toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: var(--green);
+            color: #000;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 999;
+            pointer-events: none;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.warn { background: var(--gold); }
+        .toast.error { background: var(--danger); color: #fff; }
+        
         /* 新建会话弹窗 */
         .new-session-form {
-            display: flex;
+            display: none;
+            padding: 12px 16px;
             gap: 8px;
-            padding: 0 16px 8px;
+            background: var(--card2);
+            border-bottom: 1px solid #333;
         }
+        .new-session-form.open { display: flex; }
         .new-session-form input {
             flex: 1;
             background: var(--card);
@@ -337,30 +359,27 @@
 </head>
 <body>
 
-    <!-- 顶部 -->
     <div class="header">
-        <h1>TRE 计价器</h1>
-        <div class="subtitle">卡钟75折 · 额外消费原价 · 自动保存</div>
+        <h1><span class="online-dot" id="onlineDot"></span>TRE 计价器</h1>
+        <div class="subtitle">多人实时同步 · 卡钟折扣 · 自动保存</div>
     </div>
 
-    <!-- 会话栏 -->
     <div class="session-bar">
         <select id="sessionSelect" onchange="loadSession()">
             <option value="">-- 选择会话 --</option>
         </select>
-        <div class="session-name" id="sessionName"></div>
         <button class="btn btn-sm btn-blue" onclick="showNewSession()">新建</button>
         <button class="btn btn-sm btn-danger" onclick="deleteSession()">删除</button>
+        <button class="btn btn-sm btn-gold" onclick="resetSession()">重置</button>
     </div>
 
-    <!-- 新建会话 -->
-    <div class="new-session-form" id="newSessionForm" style="display:none">
-        <input type="text" id="newSessionName" placeholder="会话名称（如：2026-06-08）">
+    <div class="new-session-form" id="newSessionForm">
+        <input type="text" id="newSessionName" placeholder="会话名称（如：2026-06-08）"
+               onkeydown="if(event.key==='Enter')createSession()">
         <button class="btn btn-sm btn-green" onclick="createSession()">创建</button>
         <button class="btn btn-sm btn-danger" onclick="hideNewSession()">取消</button>
     </div>
 
-    <!-- 折扣 -->
     <div class="discount-bar" id="discountBar" style="display:none">
         <label>卡钟折扣：</label>
         <input type="number" id="discountInput" value="75" min="1" max="100">
@@ -368,24 +387,20 @@
         <button class="apply-btn" onclick="setDiscount()">应用</button>
     </div>
 
-    <!-- 添加客户 -->
-    <div class="add-person" id="addPersonBar" style="display:none">
-        <input type="text" id="newPersonName" placeholder="输入姓名" 
+    <div class="toolbar" id="addPersonBar" style="display:none">
+        <input type="text" id="newPersonName" placeholder="输入客户姓名"
                onkeydown="if(event.key==='Enter')addPerson()">
         <button class="btn btn-primary" onclick="addPerson()">添加客户</button>
     </div>
 
-    <!-- 客户列表 -->
     <div id="personList"></div>
 
-    <!-- 底部总计 -->
     <div class="total-bar" id="totalBar" style="display:none">
         <div class="label">总计</div>
         <div class="amount" id="grandTotal">¥0</div>
-        <button class="receipt-btn" onclick="showReceipt()">账单</button>
+        <button class="btn btn-sm btn-green" onclick="showReceipt()">📋账单</button>
     </div>
 
-    <!-- 账单弹窗 -->
     <div class="modal-overlay" id="receiptModal">
         <div class="modal">
             <h2>📋 账单</h2>
@@ -397,32 +412,80 @@
         </div>
     </div>
 
+    <div class="toast" id="toast"></div>
+
 <script>
 let currentSessionId = null;
+let currentData = null;
+let pollTimer = null;
+let lastUpdatedAt = '';
+
+// Toast
+function toast(msg, type='') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    setTimeout(() => el.className = 'toast', 2000);
+}
+
+// 在线状态
+function setOnline(online) {
+    const dot = document.getElementById('onlineDot');
+    dot.style.background = online ? 'var(--green)' : 'var(--danger)';
+}
 
 // 页面加载
-window.onload = () => refreshSessionList();
+window.onload = () => {
+    refreshSessionList();
+    // 轮询同步：每2秒检查更新
+    pollTimer = setInterval(pollUpdate, 2000);
+};
+
+// 轮询检查数据变化（轻量：其他人改了数据会自动同步）
+async function pollUpdate() {
+    if (!currentSessionId) return;
+    try {
+        const res = await fetch(`/api/sessions/${currentSessionId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        // 只在数据有变化时才更新UI
+        if (data.updated_at !== lastUpdatedAt) {
+            lastUpdatedAt = data.updated_at;
+            currentData = data;
+            renderData(data);
+        }
+        setOnline(true);
+    } catch(e) {
+        setOnline(false);
+    }
+}
 
 // 会话列表
 async function refreshSessionList() {
-    const res = await fetch('/api/sessions');
-    const sessions = await res.json();
-    const sel = document.getElementById('sessionSelect');
-    sel.innerHTML = '<option value="">-- 选择会话 --</option>';
-    sessions.forEach(s => {
-        sel.innerHTML += `<option value="${s.filename.replace('.json','')}">${s.name} (${s.person_count}人 ¥${s.grand_total})</option>`;
-    });
-    if (currentSessionId) sel.value = currentSessionId;
+    try {
+        const res = await fetch('/api/sessions');
+        const sessions = await res.json();
+        const sel = document.getElementById('sessionSelect');
+        sel.innerHTML = '<option value="">-- 选择会话 --</option>';
+        sessions.forEach(s => {
+            sel.innerHTML += `<option value="${s.id}">${s.name} (${s.person_count}人 ¥${s.grand_total})</option>`;
+        });
+        if (currentSessionId) sel.value = currentSessionId;
+        setOnline(true);
+    } catch(e) {
+        setOnline(false);
+    }
 }
 
 function showNewSession() {
-    document.getElementById('newSessionForm').style.display = 'flex';
+    const form = document.getElementById('newSessionForm');
+    form.classList.add('open');
     const today = new Date().toISOString().slice(0,10);
     document.getElementById('newSessionName').value = today;
     document.getElementById('newSessionName').focus();
 }
 function hideNewSession() {
-    document.getElementById('newSessionForm').style.display = 'none';
+    document.getElementById('newSessionForm').classList.remove('open');
 }
 
 async function createSession() {
@@ -435,181 +498,223 @@ async function createSession() {
     });
     const data = await res.json();
     currentSessionId = data.id;
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
     hideNewSession();
     await refreshSessionList();
-    await renderSession();
+    renderData(data);
+    toast('会话已创建');
 }
 
 async function loadSession() {
     const sel = document.getElementById('sessionSelect');
     currentSessionId = sel.value;
-    if (currentSessionId) await renderSession();
-    else {
+    if (!currentSessionId) {
         document.getElementById('personList').innerHTML = '';
         document.getElementById('totalBar').style.display = 'none';
         document.getElementById('discountBar').style.display = 'none';
         document.getElementById('addPersonBar').style.display = 'none';
+        return;
     }
+    const res = await fetch(`/api/sessions/${currentSessionId}`);
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
 }
 
 async function deleteSession() {
     if (!currentSessionId) return;
-    if (!confirm('确定删除此会话？')) return;
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}`, {method:'DELETE'});
+    if (!confirm('确定删除此会话？数据无法恢复！')) return;
+    await fetch(`/api/sessions/${currentSessionId}`, {method:'DELETE'});
     currentSessionId = null;
+    currentData = null;
     await refreshSessionList();
     document.getElementById('personList').innerHTML = '';
     document.getElementById('totalBar').style.display = 'none';
+    document.getElementById('discountBar').style.display = 'none';
+    document.getElementById('addPersonBar').style.display = 'none';
+    toast('会话已删除');
 }
 
-// 渲染会话
-async function renderSession() {
+async function resetSession() {
     if (!currentSessionId) return;
-    const res = await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}`);
+    if (!confirm('确定重置？所有客户和数据将被清空，方便下一次计算！')) return;
+    const res = await fetch(`/api/sessions/${currentSessionId}/reset`, {method:'POST'});
     const data = await res.json();
-    
-    document.getElementById('sessionName').textContent = data.name;
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
+    toast('已重置，可以开始新计算！', 'warn');
+}
+
+// 渲染
+function renderData(data) {
     document.getElementById('discountInput').value = Math.round(data.discount * 100);
     document.getElementById('discountBar').style.display = 'flex';
     document.getElementById('addPersonBar').style.display = 'flex';
     document.getElementById('totalBar').style.display = 'flex';
     document.getElementById('grandTotal').textContent = `¥${data.grand_total}`;
-    
+
     const list = document.getElementById('personList');
-    if (data.persons.length === 0) {
+    if (!data.persons || data.persons.length === 0) {
         list.innerHTML = '<div class="empty"><div class="icon">👤</div>添加客户开始计价</div>';
         return;
     }
-    
+
     const discountPct = Math.round(data.discount * 100);
     list.innerHTML = data.persons.map((p, i) => `
         <div class="person-card">
-            <div class="person-header" onclick="togglePerson(${i})">
-                <span class="name">${p.name}</span>
+            <div class="person-header" onclick="togglePerson(${p.id})">
+                <span class="name">${esc(p.name)}</span>
                 <span class="total">¥${p.total}</span>
-                <span class="toggle" id="toggle-${i}">▼</span>
+                <span class="toggle" id="toggle-${p.id}">▼</span>
             </div>
-            <div class="person-body" id="body-${i}">
-                <!-- 卡钟 -->
+            <div class="person-body" id="body-${p.id}">
                 <div class="section-title">🕐 卡钟费用（${discountPct}%折扣）</div>
                 <div class="fee-tags">
-                    ${p.clock_fees.map((f, j) => `
-                        <span class="fee-tag">${f}<span class="del" onclick="removeClock(${i},${j})">✕</span></span>
+                    ${p.clock_fees.map(c => `
+                        <span class="fee-tag">${c.fee}<span class="del" onclick="removeClock(${p.id},${c.id})">✕</span></span>
                     `).join('')}
                 </div>
                 <div class="add-row">
-                    <input type="number" id="clock-input-${i}" placeholder="金额" step="0.01"
-                           onkeydown="if(event.key==='Enter')addClock(${i})">
-                    <button class="btn btn-sm btn-green" onclick="addClock(${i})">添加</button>
+                    <input type="number" id="clock-input-${p.id}" placeholder="金额" step="0.01"
+                           onkeydown="if(event.key==='Enter')addClock(${p.id})">
+                    <button class="btn btn-sm btn-green" onclick="addClock(${p.id})">添加</button>
                 </div>
                 <div class="subtotal">
                     卡钟合计：<span>¥${p.clock_total}</span> → ${discountPct}%折：<span class="gold">¥${p.clock_discounted}</span>
                 </div>
-                
-                <!-- 额外消费 -->
+
                 <div class="section-title">🍺 额外消费（原价）</div>
                 <div class="fee-tags">
-                    ${p.extra_items.map((e, j) => `
-                        <span class="extra-tag">${e.name} ¥${e.price}<span class="del" onclick="removeExtra(${i},${j})">✕</span></span>
+                    ${p.extra_items.map(e => `
+                        <span class="extra-tag">${esc(e.name)} ¥${e.price}<span class="del" onclick="removeExtra(${p.id},${e.id})">✕</span></span>
                     `).join('')}
                 </div>
                 <div class="add-row">
-                    <input type="text" id="extra-name-${i}" placeholder="名称" style="flex:1">
-                    <input type="number" id="extra-price-${i}" placeholder="金额" class="small" step="0.01"
-                           onkeydown="if(event.key==='Enter')addExtra(${i})">
-                    <button class="btn btn-sm btn-gold" onclick="addExtra(${i})">添加</button>
+                    <input type="text" id="extra-name-${p.id}" placeholder="名称" style="flex:1">
+                    <input type="number" id="extra-price-${p.id}" placeholder="金额" class="small" step="0.01"
+                           onkeydown="if(event.key==='Enter')addExtra(${p.id})">
+                    <button class="btn btn-sm btn-gold" onclick="addExtra(${p.id})">添加</button>
                 </div>
                 ${p.extra_items.length ? `<div class="subtotal">额外小计：<span class="gold">¥${p.extra_total}</span></div>` : ''}
-                
-                <!-- 删除客户 -->
+
                 <div style="margin-top:12px;text-align:right">
-                    <button class="btn btn-sm btn-danger" onclick="removePerson(${i})">删除 ${p.name}</button>
+                    <button class="btn btn-sm btn-danger" onclick="removePerson(${p.id})">删除 ${esc(p.name)}</button>
                 </div>
             </div>
         </div>
     `).join('');
 }
 
-// 展开/收起
-function togglePerson(idx) {
-    const body = document.getElementById(`body-${idx}`);
-    const toggle = document.getElementById(`toggle-${idx}`);
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function togglePerson(pid) {
+    const body = document.getElementById(`body-${pid}`);
+    const toggle = document.getElementById(`toggle-${pid}`);
     body.classList.toggle('open');
     toggle.classList.toggle('open');
 }
 
-// 折扣
 async function setDiscount() {
     if (!currentSessionId) return;
     const val = parseInt(document.getElementById('discountInput').value);
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/discount`, {
+    const res = await fetch(`/api/sessions/${currentSessionId}/discount`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({discount: val})
     });
-    await renderSession();
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
 }
 
-// 添加客户
 async function addPerson() {
     if (!currentSessionId) return;
     const name = document.getElementById('newPersonName').value.trim();
     if (!name) return;
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/persons`, {
+    const res = await fetch(`/api/sessions/${currentSessionId}/persons`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({name})
     });
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
     document.getElementById('newPersonName').value = '';
-    await renderSession();
+    await refreshSessionList();
 }
 
-async function removePerson(idx) {
+async function removePerson(pid) {
     if (!confirm('确定删除此客户？')) return;
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/persons/${idx}`, {method:'DELETE'});
-    await renderSession();
+    const res = await fetch(`/api/sessions/${currentSessionId}/persons/${pid}`, {method:'DELETE'});
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
+    await refreshSessionList();
 }
 
-// 卡钟
-async function addClock(personIdx) {
-    const input = document.getElementById(`clock-input-${personIdx}`);
+async function addClock(pid) {
+    const input = document.getElementById(`clock-input-${pid}`);
     const fee = parseFloat(input.value);
     if (!fee || fee <= 0) return;
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/persons/${personIdx}/clock`, {
+    const res = await fetch(`/api/sessions/${currentSessionId}/persons/${pid}/clock`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({fee})
     });
-    await renderSession();
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
+    await refreshSessionList();
 }
 
-async function removeClock(personIdx, clockIdx) {
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/persons/${personIdx}/clock/${clockIdx}`, {method:'DELETE'});
-    await renderSession();
+async function removeClock(pid, cid) {
+    const res = await fetch(`/api/sessions/${currentSessionId}/persons/${pid}/clock/${cid}`, {method:'DELETE'});
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
+    await refreshSessionList();
 }
 
-// 额外消费
-async function addExtra(personIdx) {
-    const name = document.getElementById(`extra-name-${personIdx}`).value.trim();
-    const price = parseFloat(document.getElementById(`extra-price-${personIdx}`).value);
+async function addExtra(pid) {
+    const name = document.getElementById(`extra-name-${pid}`).value.trim();
+    const price = parseFloat(document.getElementById(`extra-price-${pid}`).value);
     if (!name || !price || price <= 0) return;
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/persons/${personIdx}/extra`, {
+    const res = await fetch(`/api/sessions/${currentSessionId}/persons/${pid}/extra`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({name, price})
     });
-    await renderSession();
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
+    await refreshSessionList();
 }
 
-async function removeExtra(personIdx, extraIdx) {
-    await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/persons/${personIdx}/extra/${extraIdx}`, {method:'DELETE'});
-    await renderSession();
+async function removeExtra(pid, eid) {
+    const res = await fetch(`/api/sessions/${currentSessionId}/persons/${pid}/extra/${eid}`, {method:'DELETE'});
+    const data = await res.json();
+    currentData = data;
+    lastUpdatedAt = data.updated_at;
+    renderData(data);
+    await refreshSessionList();
 }
 
-// 账单
 async function showReceipt() {
     if (!currentSessionId) return;
-    const res = await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/receipt`);
+    const res = await fetch(`/api/sessions/${currentSessionId}/receipt`);
     const data = await res.json();
     document.getElementById('receiptText').textContent = data.receipt;
     document.getElementById('receiptModal').classList.add('open');
@@ -621,7 +726,7 @@ function closeReceipt() {
 
 function copyReceipt() {
     const text = document.getElementById('receiptText').textContent;
-    navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板'));
+    navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板'));
 }
 </script>
 
