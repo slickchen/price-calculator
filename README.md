@@ -31,9 +31,18 @@ pip install -r requirements.txt
 
 ## 运行
 
+### GUI版（桌面）
 ```bash
 python gui.py
 ```
+
+### Web版（手机访问）
+```bash
+python app.py
+```
+然后手机浏览器访问：`http://<电脑IP>:5000`
+
+手机和电脑需在同一局域网。
 
 ## 使用说明
 
